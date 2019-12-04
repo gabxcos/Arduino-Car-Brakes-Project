@@ -11,15 +11,16 @@ enum side { // enumerazione usata per distinguere se applicare ciascuna funzione
 /********************** PARAMETRI del MODELLO */
 
 // ---- Sensore
-long threshDist = 70;   // distanza minima dalla quale iniziare a valutare la presenza di un ostacolo
+long threshDist = 50;   // distanza minima dalla quale iniziare a valutare la presenza di un ostacolo
+int bufferSize = 15;    // dimensione del contatore di buffer per ovviare a letture errate del sensore
 
 // ---- Servo
 int initAngle = 90;     // angolo iniziale del servo, 90° = centrale
-int passo = 4;          // angolo di rotazione ad ogni loop, in gradi
+int passo = 2;          // angolo di rotazione ad ogni loop, in gradi
 
 // ---- Motori
-int initVel = 0;        // velocità iniziale dei motori, in % (0-100)
-float accel = 0.6;      // minima de/accelerazione
+float initVel = 100;        // velocità iniziale dei motori, in % (0-100)
+float accel = 0.8;      // minima de/accelerazione
                         //  |-> N.B. costante moltiplicativa dell'AZIONE PROPORZIONALE
 int warmup = 10;        // AZIONE COSTANTE nel caso in cui l'AZIONE PROPORZIONALE sia non-applicabile
                         // i.e. nessun ostacolo rilevato
@@ -35,7 +36,8 @@ int warmup = 10;        // AZIONE COSTANTE nel caso in cui l'AZIONE PROPORZIONAL
 int trigPin = 30;     // Trigger pin del HC-SR04
 int echoPin = 31;     // Echo pin del HC-SR04
 long duration;        // Variabile per il calcolo della durata di ritorno del segnale
-long distance;        // Variabile per il calcolo della distanza dell'ostacolo, data "duration"
+long distance;        // Variabili per il calcolo della distanza dell'ostacolo, data "duration"
+int distanceBuffer = bufferSize; // Per ovviare a letture sbagliate intermedie
 
 // ----
 // Sfrutta un intervallo minimo per valutare la distanza dell'ostacolo più vicino
@@ -44,15 +46,26 @@ void getWavesBack(){
   delayMicroseconds(2);   
   digitalWrite(trigPin, HIGH);     // send waves for 10 us
   delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
   duration = pulseIn(echoPin, HIGH); // receive reflected waves
-  distance = duration / 58.2;   // convert to distance    
-  delay(10);
+  distance = duration < 38000 ? (long)((float)duration / 58.31) : 100;   // convert to distance  
+  delay(30);
 }
 
 // Valuta se la distanza dell'ostacolo è sotto la soglia, come da parametro: se "è in collisione"
 bool isColliding(){
-  if(distance > threshDist) return false;
-  else return true;
+  if(distance > threshDist){
+    if(distanceBuffer > 0){
+      distanceBuffer--;
+      return true;
+    }
+    else return false;
+  }
+  else{
+    distanceBuffer = bufferSize;
+    return true;
+  }
 }
 
 // Se l'ostacolo è "in collisione", valuta una distanza percentuale (0-100)
@@ -61,10 +74,21 @@ int mapDistance(){
 }
 
 
+/******* SERVO */
+Servo myservo;        // oggetto Servo per controllare il servomotore tramite "Servo.h"
+int angle = initAngle;// angolo del servo, 0° = sx, 180° = dx
+int dir = -1;         // variabile per la direzione di rotazione del servo, -1 = sx, +1 = dx
+
+// ----
+// Aggiorna ad ogni loop l'angolo, muovendosi di "passo" gradi nella direzione corrente, eventualmente invertendola
+void updateAngle(){
+  if(angle <= 45 || angle >= 135) dir *= -1;
+  angle += dir*passo;
+}
 
 
 /******* MOTORI */
-int currVel = initVel;  // Variabile % (0-100) per la velocità dei motori
+float currVel = initVel;  // Variabile % (0-100) per la velocità dei motori
 
                         // N.B. poiché la direzione di svolta è opposta al lato del motore acceso,
                         // le direzioni espresse nelle variabili sono volutamente invertite di lato,
@@ -117,43 +141,44 @@ void stopMotor(side s){
 
 // Ottiene la velocità in PWM, data quella percentuale desiderata
 int mapSpeed(int percSpeed){
-  return map(percSpeed, 0, 100, 60, 100); // 75-255 intervallo sperimentale di funzionamento
+  return map(percSpeed, 0, 100, 60, 150); // 75-255 intervallo sperimentale di funzionamento
 }
 
 // Applica la velocità corrente % a uno/entrambi i motori
 void updateSpeed(side s){
   if(s == LEFT || s == BOTH){
-    analogWrite(enL, mapSpeed(currVel));      
+    analogWrite(enL, mapSpeed((int)currVel));      
   }
   if(s == RIGHT || s == BOTH){
-    analogWrite(enR, mapSpeed(currVel));
+    analogWrite(enR, mapSpeed((int)currVel));
   }
 }
 
 // Aggiorna la velocità corrente % in base alla prossimità dall'ostacolo
 void decelerate(){ 
-  currVel = max(0, (int)(currVel-(mapDistance()*accel)));
+  int tempDistance = mapDistance();
+  if(tempDistance < 0) tempDistance = 0;
+  if(tempDistance > 100) tempDistance = 100;
+  
+  currVel = max(0, (currVel -(tempDistance*accel)));
   if(currVel <= 1) stopMotor(BOTH);
-  else forward(BOTH);
+  else{
+    if(angle < 90){
+      stopMotor(LEFT); // se l'ostacolo è a sinistra, vai a destra
+      forward(RIGHT);
+    }
+    if(angle < 90){
+      stopMotor(RIGHT); // se l'ostacolo è a destra, vai a sinistra
+      forward(LEFT);
+    }
+    else forward(BOTH);
+  }
 }
 
 // Aggiorna la velocità corrente % in assenza di ostacolo, con accelerazione costante da parametro (warmup)
 void accelerate(){
-  currVel = min(100, (int)(currVel+warmup*accel));
+  currVel = min(100, (currVel+warmup*accel));
   forward(BOTH);
-}
-
-
-/******* SERVO */
-Servo myservo;        // oggetto Servo per controllare il servomotore tramite "Servo.h"
-int angle = initAngle;// angolo del servo, 0° = sx, 180° = dx
-int dir = -1;         // variabile per la direzione di rotazione del servo, -1 = sx, +1 = dx
-
-// ----
-// Aggiorna ad ogni loop l'angolo, muovendosi di "passo" gradi nella direzione corrente, eventualmente invertendola
-void updateAngle(){
-  if(angle <= 0 || angle >= 180) dir *= -1;
-  angle += dir*passo;
 }
 
 
@@ -181,7 +206,6 @@ void setup() {
   // ----------------------
   Serial.begin(9600);         // Inizializza la Seriale, per motivi di testing
   delay(1000);                // Aspetta 1 secondo prima di partire
-  forward(BOTH);              // Inizia muovendosi in avanti
 }
 
 
@@ -198,8 +222,8 @@ void loop() {
   if (!isColliding())   // CASO 1: NON SONO PRESENTI OSTACOLI         
   {
     accelerate(); // Aumenta la velocità, se non ha raggiunto il massimo (100%)
-    //updateAngle(); // Muovi il servo
-    //myservo.write(angle);                                                   
+    updateAngle(); // Muovi il servo
+    myservo.write(angle);                                                   
   }
 
   else                  // CASO 2: OSTACOLO IN ROTTA DI COLLISIONE
@@ -209,13 +233,15 @@ void loop() {
   
   updateSpeed(BOTH); // Imponi ai motori la nuova velocità richiesta
 
+
+
   /****** TESTING *******/
-  Serial.print("\nAbs dist: ");
+  /*Serial.print("\nAbs dist: ");
   Serial.println(distance);
   Serial.print("Perc dist: ");
   Serial.println(mapDistance());
   Serial.print("Perc vel: ");
   Serial.println(currVel);
   Serial.print("Abs vel: ");
-  Serial.println(mapSpeed(currVel));
+  Serial.println(mapSpeed(currVel));*/
 }
