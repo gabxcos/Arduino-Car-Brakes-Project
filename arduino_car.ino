@@ -1,6 +1,12 @@
 #include <Servo.h> // Libreria per la gestione del servo motore, usato per
                    // far ruotare il sensore ad ultrasuoni
 
+enum side { // enumerazione usata per distinguere se applicare ciascuna funzione ad uno solo
+  LEFT,     // o ad entrambi i lati della macchina
+  RIGHT,
+  BOTH
+};
+
 /*****************************************************************************/
 /********************** PARAMETRI del MODELLO */
 
@@ -60,12 +66,6 @@ int mapDistance(){
 /******* MOTORI */
 int currVel = initVel;  // Variabile % (0-100) per la velocità dei motori
 
-enum side { // enumerazione usata per distinguere se applicare ciascuna funzione ad uno solo
-  LEFT,     // o ad entrambi i lati della macchina
-  RIGHT,
-  BOTH
-};
-
                         // N.B. poiché la direzione di svolta è opposta al lato del motore acceso,
                         // le direzioni espresse nelle variabili sono volutamente invertite di lato,
                         // per semplificare la logica delle funzioni di supporto
@@ -117,7 +117,7 @@ void stopMotor(side s){
 
 // Ottiene la velocità in PWM, data quella percentuale desiderata
 int mapSpeed(int percSpeed){
-  return map(percSpeed, 0, 100, 0, 255); // 75-255 intervallo sperimentale di funzionamento
+  return map(percSpeed, 0, 100, 60, 100); // 75-255 intervallo sperimentale di funzionamento
 }
 
 // Applica la velocità corrente % a uno/entrambi i motori
@@ -133,11 +133,14 @@ void updateSpeed(side s){
 // Aggiorna la velocità corrente % in base alla prossimità dall'ostacolo
 void decelerate(){ 
   currVel = max(0, (int)(currVel-(mapDistance()*accel)));
+  if(currVel <= 1) stopMotor(BOTH);
+  else forward(BOTH);
 }
 
 // Aggiorna la velocità corrente % in assenza di ostacolo, con accelerazione costante da parametro (warmup)
 void accelerate(){
   currVel = min(100, (int)(currVel+warmup*accel));
+  forward(BOTH);
 }
 
 
@@ -171,7 +174,7 @@ void setup() {
   pinMode(fwdL, OUTPUT);
   pinMode(backR, OUTPUT);
   pinMode(fwdR, OUTPUT);
-  updateSpeed(BOTH, initVel); // Setta la velocità iniziale
+  updateSpeed(BOTH); // Setta la velocità iniziale
   // SERVO
   myservo.attach(11);
   myservo.write(angle);       // Posiziona il servo all'angolo iniziale
@@ -204,7 +207,7 @@ void loop() {
     decelerate(); // Diminuisci la velocità, sulla base della distanza dall'oggetto
   }
   
-  updateSpeed(BOTH, currVel); // Imponi ai motori la nuova velocità richiesta
+  updateSpeed(BOTH); // Imponi ai motori la nuova velocità richiesta
 
   /****** TESTING *******/
   Serial.print("\nAbs dist: ");
