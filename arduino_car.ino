@@ -167,7 +167,7 @@ void decelerate(){
       stopMotor(LEFT); // se l'ostacolo è a sinistra, vai a destra
       forward(RIGHT);
     }
-    if(angle < 90){
+    if(angle > 90){
       stopMotor(RIGHT); // se l'ostacolo è a destra, vai a sinistra
       forward(LEFT);
     }
