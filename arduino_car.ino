@@ -14,6 +14,7 @@ enum side { // enumerazione usata per distinguere se applicare ciascuna funzione
 
 // ---- Sensore
 long threshDist = 40;   // distanza minima dalla quale iniziare a valutare la presenza di un ostacolo
+float diffDist = 0.5;
 int bufferSize = 15;    // dimensione del contatore di buffer per ovviare a letture errate del sensore
 
 
@@ -110,6 +111,7 @@ void isColliding(side s){
   if(s == LEFT || s == BOTH){
     if(distanceL > threshDist){
       if(distanceBufferL > 0){
+        distanceL = threshDist;
         distanceBufferL--;
         collidingL = true;
       }
@@ -123,6 +125,7 @@ void isColliding(side s){
   if(s == RIGHT || s == BOTH){
     if(distanceR > threshDist){
       if(distanceBufferR > 0){
+        distanceR = threshDist;
         distanceBufferR--;
         collidingR = true;
       }
@@ -135,9 +138,20 @@ void isColliding(side s){
   }
 }
 
+// Decreta la presenza dell'ostacolo: frontale, sx, dx, o non presente
 side whereCollision(){
   isColliding(BOTH);
-  if(collidingL && collidingR) return BOTH;
+  if(collidingL && collidingR){
+    if(distanceR > distanceL){ // l'ostacolo è più vicino a sinistra
+      float diff = (float)(distanceR - distanceL)/(float)threshDist;
+      if(diff > diffDist) return LEFT;
+      else return BOTH;
+    }else if(distanceL > distanceR){ // l'ostacolo è più vicino a destra
+      float diff = (float)(distanceL - distanceR)/(float)threshDist;
+      if(diff > diffDist) return RIGHT;
+      else return BOTH;
+    }else return BOTH; // l'ostacolo è a pari distanza da sinistra e da destra
+  }
   else if(!(collidingL || collidingR)) return NONE;
   else if(collidingL && !collidingR) return LEFT;
   else if(collidingR && !collidingL) return RIGHT;
@@ -210,7 +224,7 @@ void stopMotor(side s){
 
 // Ottiene la velocità in PWM, data quella percentuale desiderata
 int mapSpeed(int percSpeed){
-  return map(percSpeed, 0, 100, 60, 150); // 75-255 intervallo sperimentale di funzionamento
+  return map(percSpeed, 0, 100, 80, 255); // 75-255 intervallo sperimentale di funzionamento
 }
 
 // Applica la velocità corrente % a uno/entrambi i motori
@@ -235,13 +249,13 @@ void decelerate(side s){
       forward(BOTH);
     }
     if(s == LEFT){
-      freccia(LEFT);
+      freccia(RIGHT);
       tempDistance = mapDistance(LEFT);
       stopMotor(RIGHT); // se l'ostacolo è a sinistra, vai a destra
       forward(LEFT);
     }
     if(s == RIGHT){
-      freccia(RIGHT);
+      freccia(LEFT);
       tempDistance = mapDistance(RIGHT);
       stopMotor(LEFT); // se l'ostacolo è a sinistra, vai a destra
       forward(RIGHT);
@@ -264,22 +278,24 @@ void accelerate(){
 }
 
 // In caso di stop assoluto, torna indietro
-void stepBack(){
+void stepBack(side s){
+  delay(2000);
   currVel = 50;  // resetta a velocità non-nulla
   updateSpeed(BOTH);
   
   stopLights(true);
-  backward(BOTH);
-  delay(500);
+  backward(s);
+  delay(1000);
   stopLights(false);
   forward(BOTH);
+  delay(100);
 }
 
 
 // Decelera o accelera proattivamente sulla base della presenza o meno dell'ostacolo
 void leggeControllo(side s){
   if(isStopped){
-    stepBack();
+    stepBack(s);
   }else{
     if(s == NONE) accelerate();
     else decelerate(s);
@@ -307,10 +323,11 @@ void setup() {
   pinMode(backR, OUTPUT);
   pinMode(fwdR, OUTPUT);
   updateSpeed(BOTH); // Setta la velocità iniziale
+  forward(RIGHT);
   forward(BOTH); // Inizia muovendosi in avanti
   // ----------------------
   Serial.begin(9600);         // Inizializza la Seriale, per motivi di testing
-  delay(1000);                // Aspetta 1 secondo prima di partire
+  delay(5000);                // Aspetta 5 secondi prima di partire
 }
 
 
