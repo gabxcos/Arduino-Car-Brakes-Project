@@ -14,12 +14,12 @@ enum side { // enumerazione usata per distinguere se applicare ciascuna funzione
 
 // ---- Sensore
 long threshDist = 40;   // distanza minima dalla quale iniziare a valutare la presenza di un ostacolo
-float diffDist = 0.5;
+float diffDist = 0.5;   // la differenza minima fra le distanze sx/dx per valutare l'ostacolo solo da un lato
 int bufferSize = 15;    // dimensione del contatore di buffer per ovviare a letture errate del sensore
 
 
 // ---- Motori
-float initVel = 0;        // velocità iniziale dei motori, in % (0-100)
+float initVel = 0;      // velocità iniziale dei motori, in % (0-100)
 float accel = 0.8;      // minima de/accelerazione
                         //  |-> N.B. costante moltiplicativa dell'AZIONE PROPORZIONALE
 int warmup = 10;        // AZIONE COSTANTE nel caso in cui l'AZIONE PROPORZIONALE sia non-applicabile
@@ -39,7 +39,7 @@ int ledBwd = 3;
 
 
 // ----
-// Accendi le frecce per sterzare
+// Accendi le frecce quando si sterza
 void freccia(side s){
   if(s == LEFT){
     digitalWrite(ledL, HIGH);
@@ -87,21 +87,21 @@ bool collidingR = true;
 // Sfrutta un intervallo minimo per valutare la distanza dell'ostacolo più vicino
 void getWavesBack(side s){
   if(s == LEFT || s == BOTH){  
-    digitalWrite(trigPinL, HIGH);     // send waves for 10 us
+    digitalWrite(trigPinL, HIGH);     // invia onde per 5 us
     delayMicroseconds(5);
     digitalWrite(trigPinL, LOW);
     
-    durationL = pulseIn(echoPinL, HIGH); // receive reflected waves
-    distanceL = durationL < 38000 ? (long)((float)durationL / 58.31) : (threshDist + warmup);   // convert to distance  
+    durationL = pulseIn(echoPinL, HIGH); // ricevi le onde riflesse
+    distanceL = durationL < 38000 ? (long)((float)durationL / 58.31) : (threshDist + warmup);   // ottieni la distanza in cm  
     delay(10);
   }
   if(s == RIGHT || s == BOTH){  
-    digitalWrite(trigPinR, HIGH);     // send waves for 10 us
+    digitalWrite(trigPinR, HIGH);     // invia onde per 5 us
     delayMicroseconds(5);
     digitalWrite(trigPinR, LOW);
     
-    durationR = pulseIn(echoPinR, HIGH); // receive reflected waves
-    distanceR = durationR < 38000 ? (long)((float)durationR / 58.31) : (threshDist + warmup);   // convert to distance  
+    durationR = pulseIn(echoPinR, HIGH); // ricevi le onde riflesse
+    distanceR = durationR < 38000 ? (long)((float)durationR / 58.31) : (threshDist + warmup);   // ottieni la distanza in cm  
     delay(10);
   }
 }
@@ -323,10 +323,9 @@ void setup() {
   pinMode(backR, OUTPUT);
   pinMode(fwdR, OUTPUT);
   updateSpeed(BOTH); // Setta la velocità iniziale
-  forward(RIGHT);
   forward(BOTH); // Inizia muovendosi in avanti
   // ----------------------
-  Serial.begin(9600);         // Inizializza la Seriale, per motivi di testing
+  //Serial.begin(9600);         // Inizializza la Seriale, per motivi di testing
   delay(5000);                // Aspetta 5 secondi prima di partire
 }
 
@@ -341,8 +340,8 @@ void loop() {
   
   getWavesBack(BOTH); // Controlla la presenza di ostacoli
 
-  side s = whereCollision();
-  leggeControllo(s);
+  side s = whereCollision(); // Determina il lato dove è presente l'ostacolo
+  leggeControllo(s);  // Calcola la nuova velocità richiesta
   
   updateSpeed(BOTH); // Imponi ai motori la nuova velocità richiesta
 
